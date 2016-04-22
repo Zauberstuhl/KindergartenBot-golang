@@ -9,6 +9,8 @@ import (
   "fmt"
   "regexp"
   "strings"
+  "strconv"
+  "math/rand"
   "./boilerplate"
 )
 
@@ -56,8 +58,9 @@ func main() {
 
   _, err = db.Exec(sqlStmt)
   if err != nil {
+    // print but do not return since the
+    // table could exist already!
     fmt.Printf("%q: %s\n", err, sqlStmt)
-    //return
   }
 
   updateFunc := func(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
@@ -69,16 +72,55 @@ func main() {
         fmt.Println("Ignoring non-text message")
         return
       }
+      recipient := tbotapi.NewRecipientFromChat(msg.Chat)
 
       fmt.Printf("<-%d, From:\t%s, Text: %s \n", msg.ID, msg.Chat, *msg.Text)
 
-      r := regexp.MustCompile(`^/(?P<command>[a-zA-Z0-9]+)\s{0,1}(?P<text>.*)$`)
-      result := r.FindStringSubmatch(*msg.Text)
+      plainRegex := regexp.MustCompile(`^[^/](?P<text>.+?)$`)
+      plainResult := plainRegex.FindStringSubmatch(*msg.Text)
+      if len(plainResult) == 2 {
+        helloSir, _ := regexp.MatchString("^(hi|hey|hallo|hello|yo)$", plainResult[0])
+        if helloSir {
+          api.NewOutgoingMessage(recipient, "Hello, Sir").Send()
+          return
+        }
+        // to be continue
+        return
+      }
 
-      if len(result) == 3 {
-        recipient := tbotapi.NewRecipientFromChat(msg.Chat)
+      addRegex := regexp.MustCompile(`^/add\s(?P<command>[a-zA-Z0-9]+)\s(?P<text>.+)$`)
+      addResult := addRegex.FindStringSubmatch(*msg.Text)
+      if len(addResult) == 3 {
+        command, opt := addResult[1], addResult[2]
+
         blacklisted := false
-        command, opt := result[1], result[2]
+        for _, entry := range blacklist {
+          if entry == command {
+            blacklisted = true
+          }
+        }
+        if blacklisted {
+          api.NewOutgoingMessage(recipient, "The "+command+" is black-listed :(").Send()
+          return
+        }
+
+        insertStmt := fmt.Sprintf(`
+          INSERT INTO kindergarten (chat, command, text)
+          VALUES ('%d', '%s', '%s')
+        `, msg.Chat.ID, command, opt)
+        _, err = db.Exec(insertStmt)
+        if err != nil {
+          fmt.Printf("%q\n", err)
+          return
+        }
+        api.NewOutgoingMessage(recipient, "New command '"+command+"' was added!").Send()
+        return
+      }
+
+      execRegex := regexp.MustCompile(`^/(?P<command>[a-zA-Z0-9]+)\s{0,1}(?P<text>.*)$`)
+      execResult := execRegex.FindStringSubmatch(*msg.Text)
+      if len(execResult) == 3 {
+        command, opt := execResult[1], execResult[2]
 
         if strings.EqualFold(command, "random") || strings.EqualFold(command, "rnd") {
           selectStmt := fmt.Sprintf(`
@@ -105,33 +147,51 @@ func main() {
               return
             }
             text := fmt.Sprintf("/%s %s", cmd, cmd_text)
+            text = strings.Replace(text, "$1", opt, -1)
             api.NewOutgoingMessage(recipient, text).Send()
           }
           return
         }
 
-        // check blacklist before we do the final step
-        for _, entry := range blacklist {
-          if entry == command {
-            blacklisted = true
-          }
-        }
-        if blacklisted {
-          api.NewOutgoingMessage(recipient, "The command is black-listed :(").Send()
-          return
-        }
+        if strings.EqualFold(command, "stats") {
+          selectStmt := fmt.Sprintf(`
+            SELECT count(*) as 'count'
+            FROM kindergarten
+            WHERE chat LIKE '%d'
+          `, msg.Chat.ID)
 
-        if strings.EqualFold(command, "add") && opt != "" {
-          insertStmt := fmt.Sprintf(`
-            INSERT INTO kindergarten (chat, command, text)
-            VALUES ('%d', '%s', '%s')
-          `, msg.Chat.ID, command, opt)
-          _, err = db.Exec(insertStmt)
+          rows, err := db.Query(selectStmt)
           if err != nil {
             fmt.Printf("%q\n", err)
             return
           }
-          api.NewOutgoingMessage(recipient, "New command '"+command+"' was added!").Send()
+          defer rows.Close()
+          for rows.Next() {
+            var count int
+            err = rows.Scan(&count)
+            if err != nil {
+              fmt.Printf("%q\n", err)
+              return
+            }
+            text := fmt.Sprintf(`There are %d commands available!`, count)
+            api.NewOutgoingMessage(recipient, text).Send()
+          }
+          return
+        }
+
+        if strings.EqualFold(command, "roll") {
+          rollTill := 10
+          if opt != "" {
+            i, err := strconv.Atoi(opt)
+            if err != nil {
+              return
+            }
+            rollTill = i
+          }
+          randNum := rand.Intn(rollTill)
+          text := fmt.Sprintf("You roll %d(0-%d)", randNum, rollTill)
+          api.NewOutgoingMessage(recipient, text).Send()
+          return
         }
 
         // still not finished?
@@ -159,27 +219,16 @@ func main() {
           if err != nil {
             fmt.Printf("%q\n", err)
           }
-
-          _, err := api.NewOutgoingMessage(recipient, text).Send()
-          if err != nil {
-            fmt.Printf("Error sending: %s\n", err)
-            return
-          }
+          text = strings.Replace(text, "$1", opt, -1)
+          api.NewOutgoingMessage(recipient, text).Send()
         }
 
         err = rows.Err()
         if err != nil {
           fmt.Printf("%q\n", err)
         }
-      }
-
-      /*outMsg, err := api.NewOutgoingMessage(tbotapi.NewRecipientFromChat(msg.Chat), *msg.Text).Send()
-
-      if err != nil {
-        fmt.Printf("Error sending: %s\n", err)
         return
       }
-      fmt.Printf("->%d, To:\t%s, Text: %s\n", outMsg.Message.ID, outMsg.Message.Chat, *outMsg.Message.Text)*/
     case tbotapi.InlineQueryUpdate:
       fmt.Println("Ignoring received inline query: ", update.InlineQuery.Query)
     case tbotapi.ChosenInlineResultUpdate:
