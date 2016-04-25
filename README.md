@@ -1,9 +1,10 @@
-# KindergartenBot-golang
- A Telegram Bot
+# KindergartenBot
+ A Telegram Bot in GO \m/
 
 ## Configuration
 
 Copy the example file
+
     cp config.json.example config.json
 
 and add the correct api token!
