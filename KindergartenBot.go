@@ -18,6 +18,14 @@ type Config struct {
   Token string
 }
 
+func mapMultiVars(opt string, text string)(res string) {
+  optArray := strings.Split(opt, " ")
+  for i := 0; i < len(optArray); i++ {
+    text = strings.Replace(text, "$"+strconv.Itoa(i+1), optArray[i], -1)
+  }
+  return text
+}
+
 func main() {
   blacklist := [7]string{
     "help",
@@ -146,8 +154,8 @@ func main() {
               fmt.Printf("%q\n", err)
               return
             }
+            cmd_text = mapMultiVars(opt, cmd_text)
             text := fmt.Sprintf("/%s %s", cmd, cmd_text)
-            text = strings.Replace(text, "$1", opt, -1)
             api.NewOutgoingMessage(recipient, text).Send()
           }
           return
@@ -219,7 +227,7 @@ func main() {
           if err != nil {
             fmt.Printf("%q\n", err)
           }
-          text = strings.Replace(text, "$1", opt, -1)
+          text = mapMultiVars(opt, text)
           api.NewOutgoingMessage(recipient, text).Send()
         }
 
