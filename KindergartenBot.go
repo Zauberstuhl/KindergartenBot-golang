@@ -3,7 +3,7 @@ package main
 import (
   "encoding/json"
   "database/sql"
-  "bitbucket.org/mrd0ll4r/tbotapi"
+  "github.com/mrd0ll4r/tbotapi"
   _ "github.com/mattn/go-sqlite3"
   "os"
   "fmt"
@@ -11,6 +11,7 @@ import (
   "strings"
   "strconv"
   "math/rand"
+  "net/http"
   "./boilerplate"
 )
 
@@ -156,7 +157,7 @@ func main() {
             }
             cmd_text = mapMultiVars(opt, cmd_text)
             text := fmt.Sprintf("/%s %s", cmd, cmd_text)
-            api.NewOutgoingMessage(recipient, text).Send()
+            api.NewOutgoingMessage(recipient, text).SetMarkdown(true).Send()
           }
           return
         }
@@ -197,7 +198,10 @@ func main() {
             rollTill = i
           }
           randNum := rand.Intn(rollTill)
-          text := fmt.Sprintf("You roll %d(0-%d)", randNum, rollTill)
+          if randNum == 0 {
+            randNum = 1
+          }
+          text := fmt.Sprintf("You roll %d (1-%d)", randNum, rollTill)
           api.NewOutgoingMessage(recipient, text).Send()
           return
         }
@@ -228,7 +232,27 @@ func main() {
             fmt.Printf("%q\n", err)
           }
           text = mapMultiVars(opt, text)
-          api.NewOutgoingMessage(recipient, text).Send()
+
+          // Try uploading images
+          imgRegex := regexp.MustCompile(`(?i)(?P<url>https?://.+/(?P<name>.+)\.(jpg|jpeg|gif|png))`)
+          imgResult := imgRegex.FindStringSubmatch(text)
+          if len(imgResult) == 4 {
+            image_url, image_name, image_ext := imgResult[1], imgResult[2], imgResult[3]
+
+            resp, err := http.Get(image_url)
+            defer resp.Body.Close()
+
+            if err != nil {
+              api.NewOutgoingMessage(recipient, text).Send()
+              return
+            }
+
+            //fmt.Printf("%s: %s -> %s\n", image_url, image_name, image_ext)
+            file_name := fmt.Sprintf("%s.%s", image_name, image_ext)
+            api.NewOutgoingPhoto(recipient, file_name, resp.Body).Send()
+          } else {
+            api.NewOutgoingMessage(recipient, text).SetMarkdown(true).Send()
+          }
         }
 
         err = rows.Err()
