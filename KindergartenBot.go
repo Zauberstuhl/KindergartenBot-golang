@@ -88,9 +88,14 @@ func main() {
       plainRegex := regexp.MustCompile(`^[^/](?P<text>.+?)$`)
       plainResult := plainRegex.FindStringSubmatch(*msg.Text)
       if len(plainResult) == 2 {
-        helloSir, _ := regexp.MatchString("^(hi|hey|hallo|hello|yo)$", plainResult[0])
+        helloSir, _ := regexp.MatchString("(?i)^(haii|hi|hey|hallo|hello|yo)", plainResult[0])
         if helloSir {
           api.NewOutgoingMessage(recipient, "Hello, Sir").Send()
+          return
+        }
+        byeSir, _ := regexp.MatchString("(?i)^(bye|bb|cu|cya)", plainResult[0])
+        if byeSir {
+          api.NewOutgoingMessage(recipient, "A good day, Sir").Send()
           return
         }
         // to be continue
