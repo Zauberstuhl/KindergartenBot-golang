@@ -239,10 +239,15 @@ func main() {
           text = mapMultiVars(opt, text)
 
           // Try uploading images
-          imgRegex := regexp.MustCompile(`(?i)(?P<url>https?://.+/(?P<name>.+)\.(jpg|jpeg|png))`)
+          imgRegex := regexp.MustCompile(`(?i)(?P<url>https?://.+/(?P<name>.+)\.(jpg|jpeg|png|gif))`)
           imgResult := imgRegex.FindStringSubmatch(text)
           if len(imgResult) == 4 {
             image_url, image_name, image_ext := imgResult[1], imgResult[2], imgResult[3]
+
+            if strings.EqualFold(image_ext, "gif") {
+              api.NewOutgoingMessage(recipient, text).Send()
+              return
+            }
 
             resp, err := http.Get(image_url)
             defer resp.Body.Close()
