@@ -239,7 +239,7 @@ func main() {
           text = mapMultiVars(opt, text)
 
           // Try uploading images
-          imgRegex := regexp.MustCompile(`(?i)(?P<url>https?://.+/(?P<name>.+)\.(jpg|jpeg|gif|png))`)
+          imgRegex := regexp.MustCompile(`(?i)(?P<url>https?://.+/(?P<name>.+)\.(jpg|jpeg|png))`)
           imgResult := imgRegex.FindStringSubmatch(text)
           if len(imgResult) == 4 {
             image_url, image_name, image_ext := imgResult[1], imgResult[2], imgResult[3]
