@@ -247,7 +247,8 @@ func main() {
             resp, err := http.Get(image_url)
             defer resp.Body.Close()
 
-            if err != nil {
+            if err != nil || resp.ContentLength > 1000000 {
+              fmt.Printf("Content length exceeds 1000k: %d\n", resp.ContentLength)
               api.NewOutgoingMessage(recipient, text).Send()
               return
             }
