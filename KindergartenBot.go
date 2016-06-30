@@ -28,13 +28,16 @@ func mapMultiVars(opt string, text string)(res string) {
 }
 
 func main() {
-  blacklist := [7]string{
+  blacklist := [10]string{
     "help",
     "add",
     "list",
     "stats",
     "random",
     "fixbot",
+    "points",
+    "wall",
+    "quiz",
     "roll",
   }
 
@@ -56,21 +59,34 @@ func main() {
   }
   defer db.Close()
 
-  sqlStmt := `
-    CREATE TABLE kindergarten (
+  // kindergarten table + index
+  db.Exec(`CREATE
+    TABLE kindergarten (
       text TEXT(255),
       chat TEXT(25),
       command TEXT(25),
       UNIQUE(chat, command)
       ON CONFLICT IGNORE
-    );`
-
-  _, err = db.Exec(sqlStmt)
-  if err != nil {
-    // print but do not return since the
-    // table could exist already!
-    fmt.Printf("%q: %s\n", err, sqlStmt)
-  }
+    );
+  `)
+  db.Exec(`CREATE
+    INDEX index_kindergarten_chat
+    ON kindergarten (chat);
+  `)
+  // kindergarten_points table + index
+  db.Exec(`CREATE
+    TABLE kindergarten_points (
+      userid INT(11),
+      points INT(11) DEFAULT 0,
+      answer TEXT(255) DEFAULT NULL,
+      last_played INT(11) DEFAULT (strftime('%s','now')),
+      UNIQUE(userid)
+    );
+  `)
+  db.Exec(`CREATE UNIQUE
+    INDEX index_kindergarten_points_userid
+    ON kindergarten_points (userid);
+  `);
 
   updateFunc := func(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
     switch update.Type() {
@@ -208,6 +224,184 @@ func main() {
           }
           text := fmt.Sprintf("You roll %d (1-%d)", randNum, rollTill)
           api.NewOutgoingMessage(recipient, text).Send()
+          return
+        }
+
+        if strings.EqualFold(command, "wall") {
+          rows, err := db.Query(`SELECT userid, points
+            FROM kindergarten_points
+            ORDER BY points DESC
+            LIMIT 10;`)
+          if err != nil {
+            fmt.Printf("%q\n", err)
+            return
+          }
+          defer rows.Close()
+
+          var wall string = ""
+          var cnt int = 0
+          for rows.Next() {
+            var userid int
+            var points int
+            err = rows.Scan(&userid, &points)
+            if err != nil {
+              return
+            }
+            cnt = cnt + 1
+            wall = fmt.Sprintf("%s\n%d. %d -> *%d*", wall, cnt, userid, points)
+          }
+          api.NewOutgoingMessage(recipient, wall).SetMarkdown(true).Send()
+        }
+
+        if strings.EqualFold(command, "points") {
+          selectStmt := fmt.Sprintf(`SELECT points
+          FROM kindergarten_points
+          WHERE userid = %d;`, msg.From.ID)
+          rows, err := db.Query(selectStmt)
+
+          if err != nil {
+            fmt.Printf("%q\n", err)
+            return
+          }
+          defer rows.Close()
+
+          points := 0
+          for rows.Next() { rows.Scan(&points) }
+          text := fmt.Sprintf("You have *%d* points!", points)
+
+          api.NewOutgoingMessage(recipient, text).SetMarkdown(true).Send()
+        }
+
+        if strings.EqualFold(command, "quiz") {
+          selectStmt := fmt.Sprintf(`SELECT count(*) as count
+          FROM kindergarten
+          WHERE chat = %d;`, msg.Chat.ID)
+          rows, err := db.Query(selectStmt)
+          defer rows.Close()
+          var count int = 0
+          for rows.Next() { rows.Scan(&count) }
+          if count < 50 {
+            api.NewOutgoingMessage(recipient,
+              "You need a minimum of 50 commands available for this command!").Send()
+            return;
+          }
+
+          quizRegex := regexp.MustCompile(`(?i)^/quiz\s(?P<answer>.+)$`)
+          quizResult := quizRegex.FindStringSubmatch(*msg.Text)
+          if len(quizResult) == 2 {
+            answer := execResult[2]
+
+            selectStmt := fmt.Sprintf(`SELECT answer
+              FROM kindergarten_points
+              WHERE userid = %d
+              AND answer like '%s';`, msg.From.ID, answer)
+            fmt.Printf("123query -> %s\n", selectStmt)
+            rows, err := db.Query(selectStmt)
+
+            if err != nil {
+              fmt.Printf("%q\n", err)
+              return
+            }
+            defer rows.Close()
+
+            correctAnswer := ""
+            updateQuery := `UPDATE kindergarten_points
+              SET points = points %s 1, answer = ''
+              WHERE userid = %d;`
+            for rows.Next() { rows.Scan(&correctAnswer) }
+            var result string = ""
+            if correctAnswer == "" {
+              result = "-"
+            } else { result = "+" }
+
+            api.NewOutgoingMessage(recipient,
+              fmt.Sprintf("*%s*", result)).SetMarkdown(true).Send()
+            updateQuery = fmt.Sprintf(updateQuery, result, msg.From.ID)
+            fmt.Printf("query -> %s\n", updateQuery)
+            db.Exec(updateQuery)
+            return
+          }
+
+          selectStmt = fmt.Sprintf(`SELECT points
+          FROM kindergarten_points
+          WHERE userid = %d`, msg.From.ID)
+          rows, err = db.Query(selectStmt)
+
+          if err != nil {
+            fmt.Printf("%q\n", err)
+            return
+          }
+          defer rows.Close()
+
+          var exists int = -1
+          var points int = -1
+          for rows.Next() {
+            exists = 1
+            rows.Scan(&points)
+          }
+
+          if exists < 0 {
+            insertStmt := fmt.Sprintf(`INSERT
+            INTO kindergarten_points (userid)
+            VALUES (%d)`, msg.From.ID)
+            _, err := db.Exec(insertStmt)
+
+            if err != nil {
+              fmt.Printf("%q\n", err)
+              return
+            }
+            points = 0
+          }
+
+          selectStmt = fmt.Sprintf(`SELECT text
+            FROM kindergarten_points
+            INNER JOIN kindergarten
+            WHERE chat = %d
+            AND userid = %d
+            AND command like answer
+            LIMIT 1;`, msg.Chat.ID, msg.From.ID)
+          rows, err = db.Query(selectStmt)
+          if err != nil {
+            fmt.Printf("%q\n", err)
+            return
+          }
+          defer rows.Close()
+          var text string
+          for rows.Next() { rows.Scan(&text) }
+
+          if text == "" {
+            // ELECT * FROM table ORDER BY RANDOM() LIMIT 1;
+            selectStmt = fmt.Sprintf(`SELECT command, text
+              FROM kindergarten
+              WHERE chat LIKE '%d'
+              ORDER BY RANDOM() LIMIT 1;`, msg.Chat.ID)
+            fmt.Printf("query -> %s\n", selectStmt)
+
+            rows, err = db.Query(selectStmt)
+            if err != nil {
+              fmt.Printf("%q\n", err)
+              return
+            }
+            defer rows.Close()
+
+            var command string
+            for rows.Next() { rows.Scan(&command, &text) }
+            if command == "" {
+              fmt.Printf("Command nil aborting quiz!")
+              return
+            }
+
+            insertStmt := fmt.Sprintf(`UPDATE kindergarten_points
+            SET answer = '%s' WHERE userid = %d;`, command, msg.From.ID)
+            _, err = db.Exec(insertStmt)
+
+            if err != nil {
+              fmt.Printf("%q\n", err)
+              return
+            }
+          }
+
+          api.NewOutgoingMessage(recipient, text).SetMarkdown(true).Send()
           return
         }
 
