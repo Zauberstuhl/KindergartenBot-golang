@@ -147,7 +147,7 @@ func main() {
         return
       }
 
-      execRegex := regexp.MustCompile(`^/(?P<command>[a-zA-Z0-9]+)\s{0,1}(?P<text>.*)$`)
+      execRegex := regexp.MustCompile(`^/(?P<command>[a-zA-Z0-9\_]+)\s{0,1}(?P<text>.*)$`)
       execResult := execRegex.FindStringSubmatch(*msg.Text)
       if len(execResult) == 3 {
         command, opt := execResult[1], execResult[2]
