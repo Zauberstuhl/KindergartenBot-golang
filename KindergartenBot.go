@@ -76,16 +76,16 @@ func main() {
   // kindergarten_points table + index
   db.Exec(`CREATE
     TABLE kindergarten_points (
-      userid INT(11),
+      handle TEXT(255),
       points INT(11) DEFAULT 0,
       answer TEXT(255) DEFAULT NULL,
       last_played INT(11) DEFAULT (strftime('%s','now')),
-      UNIQUE(userid)
+      UNIQUE(handle)
     );
   `)
   db.Exec(`CREATE UNIQUE
-    INDEX index_kindergarten_points_userid
-    ON kindergarten_points (userid);
+    INDEX index_kindergarten_points_handle
+    ON kindergarten_points (handle);
   `);
 
   updateFunc := func(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
@@ -228,7 +228,7 @@ func main() {
         }
 
         if strings.EqualFold(command, "wall") {
-          rows, err := db.Query(`SELECT userid, points
+          rows, err := db.Query(`SELECT handle, points
             FROM kindergarten_points
             ORDER BY points DESC
             LIMIT 10;`)
@@ -241,22 +241,27 @@ func main() {
           var wall string = ""
           var cnt int = 0
           for rows.Next() {
-            var userid int
+            var handle string
             var points int
-            err = rows.Scan(&userid, &points)
+            err = rows.Scan(&handle, &points)
             if err != nil {
               return
             }
             cnt = cnt + 1
-            wall = fmt.Sprintf("%s\n%d. %d -> *%d*", wall, cnt, userid, points)
+            wall = fmt.Sprintf("%s\n%d. %s -> *%d*", wall, cnt, handle, points)
           }
           api.NewOutgoingMessage(recipient, wall).SetMarkdown(true).Send()
         }
 
         if strings.EqualFold(command, "points") {
+          var handle = strconv.Itoa(msg.From.ID)
+          if msg.From.Username != nil {
+            handle = *(msg.From.Username)
+          }
+
           selectStmt := fmt.Sprintf(`SELECT points
           FROM kindergarten_points
-          WHERE userid = %d;`, msg.From.ID)
+          WHERE handle like '%s';`, handle)
           rows, err := db.Query(selectStmt)
 
           if err != nil {
@@ -273,6 +278,11 @@ func main() {
         }
 
         if strings.EqualFold(command, "quiz") {
+          var handle = strconv.Itoa(msg.From.ID)
+          if msg.From.Username != nil {
+            handle = *(msg.From.Username)
+          }
+
           selectStmt := fmt.Sprintf(`SELECT count(*) as count
           FROM kindergarten
           WHERE chat = %d;`, msg.Chat.ID)
@@ -293,9 +303,8 @@ func main() {
 
             selectStmt := fmt.Sprintf(`SELECT answer
               FROM kindergarten_points
-              WHERE userid = %d
-              AND answer like '%s';`, msg.From.ID, answer)
-            fmt.Printf("123query -> %s\n", selectStmt)
+              WHERE handle like '%s'
+              AND answer like '%s';`, handle, answer)
             rows, err := db.Query(selectStmt)
 
             if err != nil {
@@ -307,7 +316,7 @@ func main() {
             correctAnswer := ""
             updateQuery := `UPDATE kindergarten_points
               SET points = points %s 1, answer = ''
-              WHERE userid = %d;`
+              WHERE handle like '%s';`
             for rows.Next() { rows.Scan(&correctAnswer) }
             var result string = ""
             if correctAnswer == "" {
@@ -316,15 +325,14 @@ func main() {
 
             api.NewOutgoingMessage(recipient,
               fmt.Sprintf("*%s*", result)).SetMarkdown(true).Send()
-            updateQuery = fmt.Sprintf(updateQuery, result, msg.From.ID)
-            fmt.Printf("query -> %s\n", updateQuery)
+            updateQuery = fmt.Sprintf(updateQuery, result, handle)
             db.Exec(updateQuery)
             return
           }
 
           selectStmt = fmt.Sprintf(`SELECT points
           FROM kindergarten_points
-          WHERE userid = %d`, msg.From.ID)
+          WHERE handle like '%s'`, handle)
           rows, err = db.Query(selectStmt)
 
           if err != nil {
@@ -342,8 +350,8 @@ func main() {
 
           if exists < 0 {
             insertStmt := fmt.Sprintf(`INSERT
-            INTO kindergarten_points (userid)
-            VALUES (%d)`, msg.From.ID)
+            INTO kindergarten_points (handle)
+            VALUES ('%s')`, handle)
             _, err := db.Exec(insertStmt)
 
             if err != nil {
@@ -357,9 +365,9 @@ func main() {
             FROM kindergarten_points
             INNER JOIN kindergarten
             WHERE chat = %d
-            AND userid = %d
+            AND handle like '%s'
             AND command like answer
-            LIMIT 1;`, msg.Chat.ID, msg.From.ID)
+            LIMIT 1;`, msg.Chat.ID, handle)
           rows, err = db.Query(selectStmt)
           if err != nil {
             fmt.Printf("%q\n", err)
@@ -392,7 +400,7 @@ func main() {
             }
 
             insertStmt := fmt.Sprintf(`UPDATE kindergarten_points
-            SET answer = '%s' WHERE userid = %d;`, command, msg.From.ID)
+            SET answer = '%s' WHERE handle like '%s';`, command, handle)
             _, err = db.Exec(insertStmt)
 
             if err != nil {
