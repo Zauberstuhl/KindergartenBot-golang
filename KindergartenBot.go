@@ -453,13 +453,12 @@ func main() {
             }
 
             resp, err := http.Get(image_url)
-            defer resp.Body.Close()
-
             if err != nil || resp.ContentLength > 1000000 {
-              fmt.Printf("Content length exceeds 1000k: %d\n", resp.ContentLength)
-              api.NewOutgoingMessage(recipient, text).Send()
+              //fmt.Printf("Content length exceeds 1000k: %d\n", resp.ContentLength)
+              api.NewOutgoingMessage(recipient, "Your image size is over 9000!!").Send()
               return
             }
+            defer resp.Body.Close()
 
             //fmt.Printf("%s: %s -> %s\n", image_url, image_name, image_ext)
             file_name := fmt.Sprintf("%s.%s", image_name, image_ext)
