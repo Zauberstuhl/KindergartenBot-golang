@@ -28,13 +28,14 @@ func mapMultiVars(opt string, text string)(res string) {
 }
 
 func main() {
-  blacklist := [10]string{
+  blacklist := [11]string{
     "help",
     "add",
     "list",
     "stats",
     "random",
     "fixbot",
+    "wunderschoen",
     "points",
     "wall",
     "quiz",
