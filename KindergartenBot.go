@@ -464,6 +464,12 @@ func main() {
             file_name := fmt.Sprintf("%s.%s", image_name, image_ext)
             api.NewOutgoingPhoto(recipient, file_name, resp.Body).Send()
           } else {
+            leaveMeAlone := regexp.MustCompile(`(?i)@zauberstuhl`)
+            leaveMeAloneResult := leaveMeAlone.FindStringSubmatch(text)
+            if len(leaveMeAloneResult) > 0 {
+              text = "You have no power here!"
+            }
+
             api.NewOutgoingMessage(recipient, text).SetMarkdown(true).Send()
           }
         }
