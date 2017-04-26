@@ -15,7 +15,6 @@ func init() {
   defer db.Close()
 
   // kindergarten table + index
-  db.Exec(`ALTER TABLE kindergarten RENAME TO kindergarten_tmp;`)
   db.Exec(`CREATE
     TABLE kindergarten (
       text TEXT(255),
@@ -30,12 +29,6 @@ func init() {
     INDEX index_kindergarten_chat
     ON kindergarten (chat);
   `)
-  if _, err = db.Exec(`INSERT INTO kindergarten (
-      text, chat, command
-    ) SELECT * FROM kindergarten_tmp;
-  `); err == nil {
-    db.Exec(`DROP TABLE kindergarten_tmp;`)
-  }
   // kindergarten_points table + index
   db.Exec(`CREATE
     TABLE kindergarten_points (
