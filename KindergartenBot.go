@@ -75,24 +75,27 @@ func main() {
       plainRegex := regexp.MustCompile(`^[^/](?P<text>.+?)$`)
       plainResult := plainRegex.FindStringSubmatch(*msg.Text)
       if len(plainResult) == 2 {
-        helloSir, _ := regexp.MatchString("(?i)^(haii|hi|hey|hallo|hello|yo)", plainResult[0])
-        if helloSir {
-          api.NewOutgoingMessage(recipient, "Hello, Sir").Send()
-          return
+        words := strings.Split(plainResult[0], " ")
+        for _, word := range words {
+          var text string
+          err = db.QueryRow(`SELECT text FROM kindergarten
+            WHERE command LIKE ?
+            AND chat LIKE ?
+            AND match = 1
+            LIMIT 1`, word, msg.Chat.ID).Scan(&text)
+
+          if err == nil {
+            api.NewOutgoingMessage(recipient, text).Send()
+            break
+          }
         }
-        byeSir, _ := regexp.MatchString("(?i)^(bye|bb|cu|cya)", plainResult[0])
-        if byeSir {
-          api.NewOutgoingMessage(recipient, "A good day, Sir").Send()
-          return
-        }
-        // to be continue
         return
       }
 
-      addRegex := regexp.MustCompile(`^/add\s(?P<command>[a-zA-Z0-9]+)\s(?P<text>.+)$`)
+      addRegex := regexp.MustCompile(`^/(?P<add>add|match)\s(?P<command>[a-zA-Z0-9]+)\s(?P<text>.+)$`)
       addResult := addRegex.FindStringSubmatch(*msg.Text)
-      if len(addResult) == 3 {
-        command, opt := addResult[1], addResult[2]
+      if len(addResult) == 4 {
+        add, command, opt := addResult[1], addResult[2], addResult[3]
 
         blacklisted := false
         for _, entry := range blacklist {
@@ -105,10 +108,16 @@ func main() {
           return
         }
 
+        // choose between text match or command
+        match := 1
+        if add == "add" {
+          match = 0
+        }
+
         insertStmt := fmt.Sprintf(`
-          INSERT INTO kindergarten (chat, command, text)
-          VALUES ('%d', '%s', '%s')
-        `, msg.Chat.ID, command, opt)
+          INSERT INTO kindergarten (chat, command, text, match)
+          VALUES ('%d', '%s', '%s', %d)
+        `, msg.Chat.ID, command, opt, match)
         _, err = db.Exec(insertStmt)
         if err != nil {
           fmt.Printf("%q\n", err)
@@ -159,6 +168,7 @@ func main() {
             SELECT count(*) as 'count'
             FROM kindergarten
             WHERE chat LIKE '%d'
+            AND match = 0
           `, msg.Chat.ID)
 
           rows, err := db.Query(selectStmt)
@@ -256,7 +266,7 @@ func main() {
 
           selectStmt := fmt.Sprintf(`SELECT count(*) as count
           FROM kindergarten
-          WHERE chat = %d;`, msg.Chat.ID)
+          WHERE chat = %d AND match = 0;`, msg.Chat.ID)
           rows, err := db.Query(selectStmt)
           defer rows.Close()
           var count int = 0
@@ -393,6 +403,7 @@ func main() {
           FROM kindergarten
           WHERE command LIKE '%s'
           AND chat LIKE '%d'
+          AND match = 0
           LIMIT 1
         `, command, msg.Chat.ID)
 
