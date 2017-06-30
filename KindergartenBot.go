@@ -1,6 +1,7 @@
 package main
 
 import (
+  "time"
   "encoding/json"
   "database/sql"
   "github.com/mrd0ll4r/tbotapi"
@@ -14,6 +15,8 @@ import (
   "net/http"
   "./boilerplate"
 )
+
+var openBan bool = false
 
 var blacklist [10]string = [10]string{
   "help",
@@ -347,7 +350,7 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
         for rows.Next() { rows.Scan(&text) }
 
         if text == "" {
-          // ELECT * FROM table ORDER BY RANDOM() LIMIT 1;
+          // SELECT * FROM table ORDER BY RANDOM() LIMIT 1;
           selectStmt = fmt.Sprintf(`SELECT command, text
             FROM kindergarten
             WHERE chat LIKE '%d'
@@ -379,6 +382,33 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
         }
 
         api.NewOutgoingMessage(recipient, text).SetMarkdown(true).Send()
+        return
+      }
+
+      if openBan || strings.EqualFold(command, "ban") {
+        userID := msg.From.ID
+        randSource := rand.NewSource(time.Now().UnixNano())
+        randWithSource := rand.New(randSource)
+        if !openBan && randWithSource.Intn(2) == 0 {
+          openBan = true
+          return
+        } else {
+          fmt.Printf("<-%d, From:\t%s, was banned! \n", msg.ID, msg.Chat)
+          openBan = false
+        }
+
+        ban := api.NewOutgoingRestrictChatMember(recipient, userID)
+        // ban the user for min 60 seconds or max an hour
+        banTime := 60 + randWithSource.Intn(3540)
+        ban.UntilDate = int(time.Now().Unix()) + banTime
+        ban.CanSendMessages = false
+        ban.CanSendMediaMessages = false
+        ban.CanSendOtherMessages = false
+        ban.CanAddWebPagePreviews = false
+        ban.Send()
+
+        text := `You are banned for %d seconds! ¯\_(ツ)_/¯`
+        api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
         return
       }
 
