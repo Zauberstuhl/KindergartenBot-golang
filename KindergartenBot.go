@@ -43,6 +43,17 @@ func mapMultiVars(opt string, text string)(res string) {
   return text
 }
 
+func ban(api *tbotapi.TelegramBotAPI, userID int, recipient tbotapi.Recipient, until int) {
+  ban := api.NewOutgoingRestrictChatMember(recipient, userID)
+  // ban the user for min 60 seconds or max an hour
+  ban.UntilDate = until
+  ban.CanSendMessages = false
+  ban.CanSendMediaMessages = false
+  ban.CanSendOtherMessages = false
+  ban.CanAddWebPagePreviews = false
+  ban.Send()
+}
+
 func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
   db, err := sql.Open("sqlite3", "./kindergarten.db")
   if err != nil {
@@ -62,6 +73,19 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
     recipient := tbotapi.NewRecipientFromChat(msg.Chat)
 
     fmt.Printf("<-%d, From:\t%s, Text: %s \n", msg.ID, msg.Chat, *msg.Text)
+
+    randSource := rand.NewSource(time.Now().UnixNano())
+    randWithSource := rand.New(randSource)
+    if randWithSource.Intn(40) == 0 {
+      banTime := 60 + randWithSource.Intn(120)
+      until := int(time.Now().Unix()) + banTime
+
+      ban(api, msg.From.ID, recipient, until)
+
+      text := `You are one out of 40.. Welcome to the ban-list for %d seconds!`
+      api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+      return
+    }
 
     plainRegex := regexp.MustCompile(`^[^/](?P<text>.+?)$`)
     plainResult := plainRegex.FindStringSubmatch(*msg.Text)
@@ -387,8 +411,6 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
 
       if openBan || strings.EqualFold(command, "ban") {
         userID := msg.From.ID
-        randSource := rand.NewSource(time.Now().UnixNano())
-        randWithSource := rand.New(randSource)
         if !openBan && randWithSource.Intn(2) == 0 {
           openBan = true
           return
@@ -397,15 +419,10 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
           openBan = false
         }
 
-        ban := api.NewOutgoingRestrictChatMember(recipient, userID)
         // ban the user for min 60 seconds or max an hour
         banTime := 60 + randWithSource.Intn(3540)
-        ban.UntilDate = int(time.Now().Unix()) + banTime
-        ban.CanSendMessages = false
-        ban.CanSendMediaMessages = false
-        ban.CanSendOtherMessages = false
-        ban.CanAddWebPagePreviews = false
-        ban.Send()
+        until := int(time.Now().Unix()) + banTime
+        ban(api, userID, recipient, until)
 
         text := `You are banned for %d seconds! ¯\_(ツ)_/¯`
         api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
