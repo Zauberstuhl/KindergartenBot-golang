@@ -76,13 +76,13 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
 
     randSource := rand.NewSource(time.Now().UnixNano())
     randWithSource := rand.New(randSource)
-    if randWithSource.Intn(40) == 0 {
-      banTime := 60 + randWithSource.Intn(120)
+    if randWithSource.Intn(20) == 0 {
+      banTime := 60 + randWithSource.Intn(3600)
       until := int(time.Now().Unix()) + banTime
 
       ban(api, msg.From.ID, recipient, until)
 
-      text := `You are one out of 40.. Welcome to the ban-list for %d seconds!`
+      text := `You are one out of 20.. Welcome to the ban-list for %d seconds!`
       api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
       return
     }
@@ -419,8 +419,8 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
           openBan = false
         }
 
-        // ban the user for min 60 seconds or max an hour
-        banTime := 60 + randWithSource.Intn(3540)
+        // ban the user for min 60 seconds or max three hours
+        banTime := 60 + randWithSource.Intn(14340)
         until := int(time.Now().Unix()) + banTime
         ban(api, userID, recipient, until)
 
