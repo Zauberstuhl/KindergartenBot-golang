@@ -43,4 +43,18 @@ func init() {
     INDEX index_kindergarten_points_handle
     ON kindergarten_points (handle);
   `);
+  // ban highscore table + index
+  db.Exec(`CREATE
+    TABLE kindergarten_ban_pool (
+      user_id int(11),
+      chat_id int(11),
+      seconds INT(255) DEFAULT 0,
+      used INT(255) DEFAULT 0,
+      UNIQUE(user_id, chat_id)
+    );
+  `)
+  db.Exec(`CREATE UNIQUE
+    INDEX index_kindergarten_band_pool
+    ON kindergarten_band_pool (user_id, chat_id);
+  `);
 }

@@ -43,14 +43,36 @@ func mapMultiVars(opt string, text string)(res string) {
   return text
 }
 
-func ban(api *tbotapi.TelegramBotAPI, userID int, recipient tbotapi.Recipient, until int) {
+func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.Recipient, seconds int) {
   ban := api.NewOutgoingRestrictChatMember(recipient, userID)
-  // ban the user for min 60 seconds or max an hour
-  ban.UntilDate = until
+  ban.UntilDate = int(time.Now().Unix()) + seconds
   ban.CanSendMessages = false
   ban.CanSendMediaMessages = false
   ban.CanSendOtherMessages = false
   ban.CanAddWebPagePreviews = false
+
+  db, err := sql.Open("sqlite3", "./kindergarten.db")
+  if err != nil {
+    fmt.Printf("%q\n", err)
+    return
+  }
+  defer db.Close()
+
+  var tmp int
+  var query string
+  err = db.QueryRow(`SELECT seconds FROM kindergarten_ban_pool
+    WHERE chat_id = ?
+    AND user_id = ?
+    LIMIT 1`, channelID, userID).Scan(&tmp)
+  if err == nil {
+    query = `UPDATE kindergarten_ban_pool
+      SET seconds = seconds + %d WHERE chat_id = %d AND user_id = %d;`
+  } else {
+    query = `INSERT INTO kindergarten_ban_pool
+      (seconds, chat_id, user_id) VALUES (%d, %d, %d);`
+  }
+  db.Exec(fmt.Sprintf(query, seconds, channelID, userID))
+
   ban.Send()
 }
 
@@ -78,9 +100,7 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
     randWithSource := rand.New(randSource)
     if randWithSource.Intn(20) == 0 {
       banTime := 60 + randWithSource.Intn(3600)
-      until := int(time.Now().Unix()) + banTime
-
-      ban(api, msg.From.ID, recipient, until)
+      ban(api, msg.From.ID, msg.Chat.ID, recipient, banTime)
 
       text := `You are one out of 20.. Welcome to the ban-list for %d seconds!`
       api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
@@ -421,8 +441,7 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
 
         // ban the user for min 60 seconds or max three hours
         banTime := 60 + randWithSource.Intn(14340)
-        until := int(time.Now().Unix()) + banTime
-        ban(api, userID, recipient, until)
+        ban(api, userID, msg.Chat.ID, recipient, banTime)
 
         text := `You are banned for %d seconds! ¯\_(ツ)_/¯`
         api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
