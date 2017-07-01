@@ -4,7 +4,7 @@ import (
   "time"
   "encoding/json"
   "database/sql"
-  "github.com/mrd0ll4r/tbotapi"
+  "github.com/zauberstuhl/tbotapi"
   _ "github.com/mattn/go-sqlite3"
   "os"
   "fmt"

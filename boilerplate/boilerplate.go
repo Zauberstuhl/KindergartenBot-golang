@@ -1,7 +1,7 @@
 package boilerplate
 
 import (
-  "github.com/mrd0ll4r/tbotapi"
+  "github.com/zauberstuhl/tbotapi"
   "fmt"
   "log"
   "os"
