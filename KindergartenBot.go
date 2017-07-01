@@ -18,13 +18,15 @@ import (
 
 var openBan bool = false
 
-var blacklist [10]string = [10]string{
+var blacklist [12]string = [12]string{
   "help",
   "add",
   "list",
   "stats",
   "random",
   "fixbot",
+  "ban",
+  "bantime",
   "points",
   "wall",
   "quiz",
@@ -239,6 +241,22 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
           randNum = 1
         }
         text := fmt.Sprintf("You roll %d (1-%d)", randNum, rollTill)
+        api.NewOutgoingMessage(recipient, text).Send()
+        return
+      }
+
+      if strings.EqualFold(command, "bantime") {
+        var seconds, used int
+        err := db.QueryRow(`SELECT seconds, used
+          FROM kindergarten_ban_pool
+          WHERE chat_id = ? AND user_id = ?
+          LIMIT 1;`, msg.Chat.ID, msg.From.ID).Scan(&seconds, &used)
+        if err != nil {
+          fmt.Printf("%q\n", err)
+          return
+        }
+
+        text := fmt.Sprintf("You were banned for %d seconds and used %d seconds for banning other people!", seconds, used)
         api.NewOutgoingMessage(recipient, text).Send()
         return
       }
