@@ -45,7 +45,7 @@ func mapMultiVars(opt string, text string)(res string) {
   return text
 }
 
-func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.Recipient, seconds int) {
+func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.Recipient, seconds int) bool {
   timeNow := int(time.Now().Unix())
 
   ban := api.NewOutgoingRestrictChatMember(recipient, userID)
@@ -58,7 +58,7 @@ func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.R
   db, err := sql.Open("sqlite3", "./kindergarten.db")
   if err != nil {
     fmt.Printf("%q\n", err)
-    return
+    return false
   }
   defer db.Close()
 
@@ -74,7 +74,7 @@ func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.R
       query = `UPDATE kindergarten_ban_pool
         SET seconds = 0 WHERE chat_id = %d AND user_id = %d;`
       db.Exec(fmt.Sprintf(query, channelID, userID))
-      return
+      return false
     } else {
       query = `UPDATE kindergarten_ban_pool
         SET last_updated = %d, seconds = seconds + %d WHERE chat_id = %d AND user_id = %d;`
@@ -84,8 +84,8 @@ func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.R
       (last_updated, seconds, chat_id, user_id) VALUES (%d, %d, %d, %d);`
   }
   db.Exec(fmt.Sprintf(query, timeNow, seconds, channelID, userID))
-
   ban.Send()
+  return true
 }
 
 func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
@@ -112,10 +112,10 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
     randWithSource := rand.New(randSource)
     if randWithSource.Intn(20) == 0 {
       banTime := 320 + randWithSource.Intn(3380)
-      ban(api, msg.From.ID, msg.Chat.ID, recipient, banTime)
-
-      text := `You are one out of 20.. Welcome to the ban-list for %d seconds!`
-      api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+      if ban(api, msg.From.ID, msg.Chat.ID, recipient, banTime) {
+        text := `You are one out of 20.. Welcome to the ban-list for %d seconds!`
+        api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+      }
       return
     }
 
@@ -469,10 +469,10 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
 
         // ban the user for min 60 seconds or max four hours
         banTime := 320 + randWithSource.Intn(14080)
-        ban(api, userID, msg.Chat.ID, recipient, banTime)
-
-        text := `You are banned for %d seconds! ¯\_(ツ)_/¯`
-        api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+        if ban(api, userID, msg.Chat.ID, recipient, banTime) {
+          text := `You are banned for %d seconds! ¯\_(ツ)_/¯`
+          api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+        }
         return
       }
 
