@@ -2,6 +2,7 @@ package main
 
 import (
   "time"
+  "errors"
   "encoding/json"
   "database/sql"
   "github.com/zauberstuhl/tbotapi"
@@ -45,7 +46,7 @@ func mapMultiVars(opt string, text string)(res string) {
   return text
 }
 
-func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.Recipient, seconds int) bool {
+func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.Recipient, seconds int) error {
   timeNow := int(time.Now().Unix())
 
   ban := api.NewOutgoingRestrictChatMember(recipient, userID)
@@ -58,7 +59,7 @@ func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.R
   db, err := sql.Open("sqlite3", "./kindergarten.db")
   if err != nil {
     fmt.Printf("%q\n", err)
-    return false
+    return errors.New("Wasn't able to open the database!")
   }
   defer db.Close()
 
@@ -74,7 +75,7 @@ func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.R
       query = `UPDATE kindergarten_ban_pool
         SET seconds = 0 WHERE chat_id = %d AND user_id = %d;`
       db.Exec(fmt.Sprintf(query, channelID, userID))
-      return false
+      return errors.New("Cheating detected.. Reseting points!")
     } else {
       query = `UPDATE kindergarten_ban_pool
         SET last_updated = %d, seconds = seconds + %d WHERE chat_id = %d AND user_id = %d;`
@@ -84,8 +85,7 @@ func ban(api *tbotapi.TelegramBotAPI, userID, channelID int, recipient tbotapi.R
       (last_updated, seconds, chat_id, user_id) VALUES (%d, %d, %d, %d);`
   }
   db.Exec(fmt.Sprintf(query, timeNow, seconds, channelID, userID))
-  ban.Send()
-  return true
+  return ban.Send()
 }
 
 func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
@@ -112,11 +112,14 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
     randWithSource := rand.New(randSource)
     if randWithSource.Intn(20) == 0 {
       banTime := 320 + randWithSource.Intn(3380)
-      if ban(api, msg.From.ID, msg.Chat.ID, recipient, banTime) {
+      err := ban(api, msg.From.ID, msg.Chat.ID, recipient, banTime)
+      if err == nil {
         text := `You are one out of 20.. Welcome to the ban-list for %d seconds!`
         api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+        return
+      } else {
+        fmt.Printf("%q\n", err)
       }
-      return
     }
 
     plainRegex := regexp.MustCompile(`^[^/](?P<text>.+?)$`)
@@ -469,11 +472,14 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
 
         // ban the user for min 60 seconds or max four hours
         banTime := 320 + randWithSource.Intn(14080)
-        if ban(api, userID, msg.Chat.ID, recipient, banTime) {
+        err := ban(api, userID, msg.Chat.ID, recipient, banTime)
+        if err == nil {
           text := `You are banned for %d seconds! ¯\_(ツ)_/¯`
           api.NewOutgoingMessage(recipient, fmt.Sprintf(text, banTime)).Send()
+          return
+        } else {
+          fmt.Printf("%q\n", err)
         }
-        return
       }
 
       // still not finished?
