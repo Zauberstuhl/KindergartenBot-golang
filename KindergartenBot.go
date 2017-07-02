@@ -19,7 +19,7 @@ import (
 
 var openBan bool = false
 
-var blacklist [12]string = [12]string{
+var blacklist [13]string = [13]string{
   "help",
   "add",
   "list",
@@ -27,6 +27,7 @@ var blacklist [12]string = [12]string{
   "random",
   "fixbot",
   "ban",
+  "banpool",
   "bantime",
   "points",
   "wall",
@@ -272,6 +273,35 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
         text := fmt.Sprintf("You were banned for %d seconds and used %d seconds for banning other people!", seconds, used)
         api.NewOutgoingMessage(recipient, text).Send()
         return
+      }
+
+      if strings.EqualFold(command, "banpool") {
+        rows, err := db.Query(`SELECT
+            user_id, seconds, used, (seconds - used) AS current
+          FROM kindergarten_ban_pool
+          WHERE chat_id = ?
+          ORDER BY current DESC
+          LIMIT 30;`, msg.Chat.ID)
+        if err != nil {
+          fmt.Printf("%q\n", err)
+          return
+        }
+        defer rows.Close()
+
+        var pool string
+        var cnt int
+        for rows.Next() {
+          var userID, seconds, used, current int
+          err = rows.Scan(&userID, &seconds, &used, &current)
+          if err != nil {
+            fmt.Printf("%q\n", err)
+            return
+          }
+          cnt = cnt + 1
+          pool = fmt.Sprintf("%s\n%d. %d -> *%d* (all: %d, used: %d)",
+            pool, cnt, userID, current, seconds, used)
+        }
+        api.NewOutgoingMessage(recipient, pool).SetMarkdown(true).Send()
       }
 
       if strings.EqualFold(command, "wall") {
