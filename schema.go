@@ -61,4 +61,19 @@ func init() {
   db.Exec(`ALTER TABLE kindergarten_ban_pool
     ADD COLUMN last_updated int(11) default 0;
   `)
+  // add a new user table
+  db.Exec(`CREATE
+    TABLE kindergarten_users (
+      user_id int(11),
+      chat_id int(11),
+      last_name TEXT(255) DEFAULT NULL,
+      first_name TEXT(255) DEFAULT NULL,
+      username TEXT(255) DEFAULT NULL,
+      UNIQUE(user_id, chat_id)
+    );
+  `)
+  db.Exec(`CREATE UNIQUE
+    INDEX index_kindergarten_users
+    ON kindergarten_users (user_id, chat_id);
+  `)
 }

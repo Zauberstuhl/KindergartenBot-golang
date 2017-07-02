@@ -109,6 +109,36 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
 
     fmt.Printf("<-%d, From:\t%s, Text: %s \n", msg.ID, msg.Chat, *msg.Text)
 
+    // get user information
+    var f, l, u string
+    if msg.Chat.FirstName != nil {
+      f = *msg.Chat.FirstName
+    }
+    if msg.Chat.LastName != nil {
+      l = *msg.Chat.LastName
+    }
+    if msg.Chat.Username != nil {
+      u = *msg.Chat.Username
+    }
+    // check if user is known
+    var lastName, firstName, username, query string
+    err = db.QueryRow(`SELECT last_name, first_name, username
+      FROM kindergarten_users
+      WHERE chat_id = ?
+      AND user_id = ?
+      LIMIT 1`, msg.Chat.ID, msg.From.ID).Scan(&lastName, &firstName, &username)
+    if err == nil {
+      if f != firstName  || l != lastName || u != username {
+        query = `UPDATE kindergarten_users
+          SET last_name = "%s", first_name = "%s", username = "%s"
+          WHERE chat_id = %d AND user_id = %d;`
+      }
+    } else {
+      query = `INSERT INTO kindergarten_users
+        (last_name, first_name, username, chat_id, user_id) VALUES ("%s", "%s", "%s", %d, %d);`
+    }
+    db.Exec(fmt.Sprintf(query, l, f, u, msg.Chat.ID, msg.From.ID))
+
     randSource := rand.NewSource(time.Now().UnixNano())
     randWithSource := rand.New(randSource)
     if randWithSource.Intn(20) == 0 {
@@ -276,10 +306,14 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
       }
 
       if strings.EqualFold(command, "banpool") {
-        rows, err := db.Query(`SELECT
-            user_id, seconds, used, (seconds - used) AS current
+        rows, err := db.Query(`SELECT kindergarten_ban_pool.user_id,
+            username, last_name, first_name,
+            seconds, used, (seconds - used) AS current
           FROM kindergarten_ban_pool
-          WHERE chat_id = ?
+          LEFT JOIN kindergarten_users
+            ON kindergarten_users.user_id = kindergarten_ban_pool.user_id
+          WHERE kindergarten_ban_pool.chat_id = ?
+          GROUP BY kindergarten_ban_pool.user_id
           ORDER BY current DESC
           LIMIT 30;`, msg.Chat.ID)
         if err != nil {
@@ -291,15 +325,24 @@ func updateBot(update tbotapi.Update, api *tbotapi.TelegramBotAPI) {
         var pool string
         var cnt int
         for rows.Next() {
+          var username, first_name, last_name sql.NullString
           var userID, seconds, used, current int
-          err = rows.Scan(&userID, &seconds, &used, &current)
+          err = rows.Scan(&userID,
+            &username, &last_name, &first_name,
+            &seconds, &used, &current)
           if err != nil {
             fmt.Printf("%q\n", err)
             return
           }
           cnt = cnt + 1
-          pool = fmt.Sprintf("%s\n%d. %d -> *%d* (all: %d, used: %d)",
-            pool, cnt, userID, current, seconds, used)
+          name := first_name.String+" "+last_name.String+" ("+username.String+")"
+          if name == "  ()" {
+            pool = fmt.Sprintf("%s\n%d. %d -> *%d* (all: %d, used: %d)",
+              pool, cnt, userID, current, seconds, used)
+          } else {
+            pool = fmt.Sprintf("%s\n%d. %s -> *%d* (all: %d, used: %d)",
+              pool, cnt, name, current, seconds, used)
+          }
         }
         api.NewOutgoingMessage(recipient, pool).SetMarkdown(true).Send()
       }
