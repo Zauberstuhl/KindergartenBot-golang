@@ -14,7 +14,7 @@ import (
   "strconv"
   "math/rand"
   "net/http"
-  "./boilerplate"
+  "github.com/Zauberstuhl/KindergartenBot-golang/boilerplate"
 )
 
 var openBan bool = false
