@@ -2,7 +2,7 @@
 
 A Telegram Bot in GO \m/
 
-** This project is unmaintained ! **
+**This project is unmaintained !**
 
 ## Configuration
 
