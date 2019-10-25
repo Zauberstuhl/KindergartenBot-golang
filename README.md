@@ -1,5 +1,8 @@
 # KindergartenBot
- A Telegram Bot in GO \m/
+
+A Telegram Bot in GO \m/
+
+** This project is unmaintained ! **
 
 ## Configuration
 
